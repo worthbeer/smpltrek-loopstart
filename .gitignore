@@ -1,0 +1,15 @@
+# Never commit firmware or build output
+*.bin
+!releases/*/payload.bin
+SmplTrek*.bin
+Lofi*.bin
+*.zip
+build/
+out/
+*.elf
+*.o
+*.dis
+*.dis.txt
+.DS_Store
+__pycache__/
+*.pyc

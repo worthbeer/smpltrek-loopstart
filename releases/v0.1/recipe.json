@@ -1,0 +1,30 @@
+{
+ "source_sha256": "3b6848b0f041bcf23c73d4b0357d2f3d6dc9e7e03752b32ff7322e91e6814e53",
+ "output_sha256": "e1e5aabc72047bbe238756ff8ba2641b61ab80272b042e9a58cd75a416c97f0b",
+ "output_len": 1955453,
+ "payload_sha256": "f712736b0412885b395ec0d9c81e40ce3627875cdd25374473767fd092c37673",
+ "payload_len": 1760,
+ "load": "0xc3f00000",
+ "hooks": [
+  {
+   "vtable_word": "0xc16c5994",
+   "file_offset": 1885628,
+   "old": "0xc1560350",
+   "new": "0xc3f001e0",
+   "symbol": "loopstart_enc"
+  },
+  {
+   "vtable_word": "0xc16c59b0",
+   "file_offset": 1885656,
+   "old": "0xc1561554",
+   "new": "0xc3f00000",
+   "symbol": "loopstart_draw"
+  }
+ ],
+ "header_edits": {
+  "0x4": "0x1dd67d",
+  "0x2c": "0x1dd64d",
+  "0x34": "0x1dd64d",
+  "0x50": "0x8"
+ }
+}
