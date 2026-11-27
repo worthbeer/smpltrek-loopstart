@@ -12,7 +12,8 @@
 Installed on the one test unit and tried by the author, with a general positive report; the individual features were not checked off one by one.
 Emulator, through the controls and measured on playback position: normal loop of the remainder, WARP play-then-silence, start inside a clip, full length
 restored at 1.1, a change made while playing.
-Not confirmed on a unit: loop lengths surviving save + power cycle; time signatures other than 4/4.
+Later confirmed on the unit: the author's save test passed (loop starts and lengths survive Save).
+Not confirmed on a unit: time signatures other than 4/4.
 
 ## Known behaviour
 - Loops behave predictably while the scene is held in EDIT. On the timeline each scene end restarts the loop count, so some loops leave gaps.

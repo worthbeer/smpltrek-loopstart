@@ -54,7 +54,7 @@ length, so they play to their end, stay silent, then repeat. The others keep loo
 | Clip list page; timeline continues after leaving EDIT | seen | yes |
 | Modulo looping with the loop-length fix, WARP switch | tried, general positive report | yes, on playback position |
 | Full loop restored at 1.1; set all with wrapping; OK jump | not individually confirmed | yes (OK jump: earlier build) |
-| Loop lengths survive save + power cycle | **not yet checked** | save writes them |
+| Loop starts and lengths survive Save | seen (author's save test) | yes |
 | Time signatures other than 4/4 | untested (4 beats per bar assumed) | untested |
 
 Loops behave predictably while the scene is held in EDIT; on the timeline some leave gaps. See [releases/v0.3.1/RELEASE.md](releases/v0.3.1/RELEASE.md).
