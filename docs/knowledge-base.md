@@ -163,3 +163,20 @@ Test unit: BOOT 1.0.17, PRESET 2.0.22, MCU 1.0.6 (one SmplTrek).
 - Time-signature handling beyond 4/4 (field is in the scene record; code not read).
 - Whether the stock Config parser/writer tolerates extra chunks or longer scene records (needed for new persistent scene fields).
 - CLR revert, readout hiding (cosmetic options). END snapping dropped: the sample-edit screen has no editable END; the length lives on the scene page (BAR).
+
+## Added with v0.3
+- Live clip record (loop settings), track t 0..9, scene s 0..15: 0xC143A6E8 + t*140 + s*1400. Byte +2 = SEQ LEN (1..128), byte +4 = NOTE code
+  (0=1/1, 1=1/2, 2=1/4., 3=1/4, 4=1/8., 5=1/4T, 6=1/8, 7=1/16., 8=1/8T, 9=1/16, 10=1/32); byte +5 is a different field. The unit's SAVE writes
+  these to the project. [EMU; LEN/NOTE meaning also HW]
+- Project file: TRSQ loop chunk (2512 B) = 16-byte header + 16 scene records of 156 B; LEN at chunk byte 34+156*scene, NOTE at 36+156*scene.
+  The loop wraps playback at LEN x NOTE regardless of the audio length. [EMU]
+- Scene words (data page DP = 0xC16F3320): DP+680 = scene auto-advance (0 = hold; entering EDIT during playback clears it until STOP), DP+684 = scene
+  cursor (follows the song while playing), DP+688 = pass counter of the scene REPEAT. [EMU, hold/release HW]
+- Song loop range: last three int32 words of the 136-byte PJST chunk = on, first scene, last scene (0-based). Unit: PROJECT > SETTINGS > PLAYBACK. [EMU+HW]
+- Playback objects: two banks per track, consecutive scenes alternate. g_loop_tracks (0xC14EB798 + 72*n): word +8 = play state (2 idle, 32 playing,
+  64 clip ended; bank B entry = track + 10), word +36 = pointer to the track's playback record; bank A object = record+68, bank B = +180
+  ([0] start, [1] end, [2] position, about 4096 frames ahead of the audio). Records are not always in track order. [EMU]
+- Clip table: 0xC13DAF08 + track*4416 + scene*276 = [START][END]. [EMU]
+- AppLoopTrackView slot 1 (word 0xC16C597C, stock 0xC15608B4) runs when the page closes. [EMU+HW]
+- A payload of 7,952 bytes at 0xC3F00000 has run on a unit. [HW]
+

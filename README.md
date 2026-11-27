@@ -4,8 +4,8 @@
 > This is an early, experimental project, published as it stands. Expect rough edges, changes, and things that are untested (see **Status** below).
 > It has been run on **one** SmplTrek only. Nothing here is finished or guaranteed.
 
-A small, unofficial patch for the **Sonicware SmplTrek** (system **3.2.174**) that makes the loop-clip **START POS** page work in
-beats and bars, plus a scene-wide shift for loop clips. It does **not** include any Sonicware firmware: you build the patched update
+A small, unofficial patch for the **Sonicware SmplTrek** (system **3.2.174**) for loop clips: START in beats and bars, scene-wide moves, a clip list
+page, and "modulo" looping (a moved start loops what is left of each clip). It does **not** include any Sonicware firmware: you build the patched update
 file yourself from your own official `SmplTrek.bin`.
 
 > **Unofficial. Use at your own risk.** Not affiliated with or endorsed by Sonicware. Modifying firmware can leave a unit unusable until
@@ -22,32 +22,38 @@ please buy and support Sonicware's products.
 
 If Sonicware or any other rights holder has a concern about anything in this repository, please open an issue and it will be addressed promptly.
 
-## What it does
+## What it does (v0.3)
 
-On the loop clip's **START POS** page (clip EDIT screen, then push the **B** knob):
+**On a loop clip's START POS page** (EDIT on the track, then push the **B** knob):
 
-| | Stock 3.2.174 | With this patch |
-|---|---|---|
-| Knob A | moves START by a fixed fraction of the file (about 1/128), shown as a raw frame count | moves START **one beat** per click (one **bar** per click on long loops) so it always lands on the wave's own beat grid |
-| Display | `START:132110` (frames) | the same, plus a readout such as `B2.2` (bar.beat) |
-| **FUNC + knob A** (v0.2) | - | **shift**: every other loop clip in the same scene moves by the same number of beats (their offsets are kept) |
-| **FUNC + knob B** (v0.2) | - | **set all**: this clip and every other loop clip in the scene go to the same bar, each on its own grid |
+| Do this | Result |
+|---|---|
+| knob A | START moves in beats (a faster turn moves bars), shown as bar.beat such as `B2.2` |
+| FUNC + knob A | **shift**: every loop clip in the scene moves by the same number of beats |
+| FUNC + knob B | **set all**: every loop clip goes to this clip's bar (shorter clips wrap) |
 
-To reset a scene to zero: bring one clip to 0 with knob A, then FUNC + knob B.
+**Clip list** (anywhere on a loop clip's EDIT page: hold FUNC and *turn* knob D): title `SCENE n PLAY/STOP`; columns T (track), STRT (start), NOW (play
+position), LN (audio length, bars), SEQ (loop length, bars). UP/DOWN or the VALUE knob selects; knob A moves the selected start; FUNC + knob A moves the others
+with it; OK opens that clip; CLR closes.
 
-Playback rules are the stock firmware's (we only change where START is set): START is where playback begins inside the wave, the scene's
-BAR length is the playback window, a clip that runs out of wave before the scene ends goes silent, and each new pass restarts at START.
+**Modulo looping:** after a START change the clip loops what is left (`clip length - start`); a start past a shorter clip's end wraps around it; START at 1.1
+restores the whole clip. This replaces the clip's SEQ loop length (also one you set by hand), and SAVE stores it.
+
+**EDIT page:** while the song plays, EDIT still holds the scene; leaving EDIT now lets the timeline carry on.
 
 ## Status (read this)
 
-| | v0.1 | v0.2 |
+| v0.3 feature | On the test unit | Emulator |
 |---|---|---|
-| Beat/bar snap + readout | verified on hardware | verified on hardware |
-| FUNC + A shift | - | verified on hardware |
-| FUNC + B set all | - | **emulator only** |
-| Values persist after save + power cycle | not yet checked | not yet checked |
-| Scenes that are not 4/4 | bar grouping assumes 4 beats (beat steps stay correct) | same |
-| Loops shorter than their scene | untested | untested |
+| Beat snap + readout (v0.1), shift (v0.2) | seen | yes |
+| Clip list page | seen | yes |
+| Modulo loop while playing, down to one beat; wrap past a short clip | seen | yes |
+| Timeline continues after leaving EDIT | seen | yes |
+| Full loop restored at 1.1; set all with wrapping; OK jump | not yet confirmed | yes |
+| Loop lengths survive save + power cycle | **not yet checked** | save writes them |
+| Time signatures other than 4/4 | untested (4 beats per bar assumed) | untested |
+
+On the timeline some leftover loops go silent until a scene ends; inside EDIT they loop cleanly. See [releases/v0.3/RELEASE.md](releases/v0.3/RELEASE.md).
 
 The beat grid is each clip's own: beat = file length / (whole bars x 4), falling back to the project tempo when the file is not (within 2%)
 a whole number of bars.
@@ -58,13 +64,14 @@ You need your own official `SmplTrek.bin` for **3.2.174** (sha256 `3b6848b0f041b
 from Sonicware, and Python 3. Prebuilt payloads are in `releases/`, so no compiler is needed:
 
 ```sh
-python3 -I tools/build_image.py /path/to/official/SmplTrek.bin releases/v0.2/payload.bin releases/v0.2/symbols.txt out/SmplTrek.bin out/recipe.json
+python3 -I tools/build_image.py /path/to/official/SmplTrek.bin releases/v0.3/payload.bin releases/v0.3/symbols.txt out/SmplTrek.bin out/recipe.json
 python3 -I vendor/sonicware_integrity.py verify --profile smpltrek out/SmplTrek.bin      # must say 2/2 integrity fields match
-shasum -a 256 out/SmplTrek.bin    # v0.2: 7bef98e8fe9f66ec33de9b30e96de901e072be25a97db72ead6df924e3c75f58 ; v0.1: e1e5aabc72047bbe238756ff8ba2641b61ab80272b042e9a58cd75a416c97f0b
+shasum -a 256 out/SmplTrek.bin    # v0.3: 7142ad6d124ef3951ef35c08e7f3fdef637947884b6322743dd7635982548cff
 ```
 
-`build_image.py` checks the source hash, appends one small code section (about 3 KB at `0xC3F00000`), redirects two function pointers of the
-clip-edit page, reseals the update file's CRCs, and verifies that nothing else changed (23 header/pointer bytes differ from the official file).
+`build_image.py` checks the source hash, appends one small code section (about 8 KB at `0xC3F00000`), redirects three function pointers of the
+clip-edit page, reseals the update file's CRCs, and verifies that nothing else changed
+(older releases v0.1 and v0.2 were built with the builder of their own commit).
 To rebuild the payload from source you need a `tic6x-elf` GCC (13.3.0 tested): `scripts/build_payload.sh`.
 
 Then flash it like any official update, but **read [docs/flashing-and-recovery.md](docs/flashing-and-recovery.md) first**.

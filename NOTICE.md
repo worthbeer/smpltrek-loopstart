@@ -5,6 +5,7 @@ work credited below. This is an independent hobby project; it ships no Sonicware
 
 - **No Sonicware code is distributed here.** `releases/*/payload.bin` is machine code compiled from `src/payload.c` in this repository
   (rebuild it with `scripts/build_payload.sh`; it is byte-identical). The firmware update you flash is produced on your machine from your own official file.
+- From v0.3 the payload also contains two small register save/restore routines from GCC's libgcc (GPL with the GCC Runtime Library Exception).
 - `vendor/sonicware_integrity.py` is from [seawaffle/smpltrek-re](https://github.com/seawaffle/smpltrek-re), MIT, copyright (c) 2026 seawaffle.
   Its licence text is kept in `vendor/LICENSE-smpltrek-re.txt`.
 - The firmware addresses, structure names and behaviours in `src/` and `docs/` come from our own analysis of the public 3.2.174 update file,

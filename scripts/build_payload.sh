@@ -5,9 +5,10 @@ set -e
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:-$HERE/build}"; mkdir -p "$OUT"
 if [ -n "$TIC6X" ]; then T="$TIC6X/"; else T=""; fi
-"${T}tic6x-elf-gcc" -O2 -mlittle-endian -march=c674x -ffreestanding -fno-pic -fno-stack-protector -fno-builtin \
+"${T}tic6x-elf-gcc" -Os -mlittle-endian -march=c674x -ffreestanding -fno-pic -msdata=none -fno-stack-protector -fno-builtin \
   -ffunction-sections -fno-asynchronous-unwind-tables -nostdlib -c "$HERE/src/payload.c" -o "$OUT/payload.o"
-"${T}tic6x-elf-ld" -T "$HERE/src/link.ld" -o "$OUT/payload.elf" "$OUT/payload.o"
+LIBGCC="$("${T}tic6x-elf-gcc" -mlittle-endian -march=c674x -print-libgcc-file-name)"   # -Os calls __c6xabi_push_rts / pop_rts
+"${T}tic6x-elf-ld" -T "$HERE/src/link.ld" -o "$OUT/payload.elf" "$OUT/payload.o" "$LIBGCC"
 "${T}tic6x-elf-objcopy" -O binary "$OUT/payload.elf" "$OUT/payload.bin"
 "${T}tic6x-elf-nm" "$OUT/payload.elf" > "$OUT/payload.nm"
 ls -l "$OUT/payload.bin"; grep -E " T loopstart_" "$OUT/payload.nm"

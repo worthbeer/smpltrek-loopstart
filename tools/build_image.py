@@ -6,7 +6,8 @@
 Changes made (and nothing else; verified byte-for-byte afterwards):
   * append one 'sect' (load address 0xC3F00000 + payload) to the SYSTEM image
   * container/descriptor/system lengths and section count 7 -> 8
-  * two vtable words of AppLoopTrackView (vptr 0xC16C5978):
+  * three vtable words of AppLoopTrackView (vptr 0xC16C5978):
+        0xC16C597C  close (slot 1) 0xC15608B4 -> loopstart_leave
         0xC16C5994  handleEncoder  0xC1560350 -> loopstart_enc
         0xC16C59B0  draw           0xC1561554 -> loopstart_draw
   * both CRCs resealed (vendor/sonicware_integrity.py, from github.com/seawaffle/smpltrek-re, MIT)
@@ -23,6 +24,7 @@ LOAD = 0xC3F00000
 HOOKS = {  # vtable word address -> (original target, payload symbol)
     0xC16C5994: (0xC1560350, "loopstart_enc"),    # AppLoopTrackView handleEncoder (vptr 0xC16C5978, +28)
     0xC16C59B0: (0xC1561554, "loopstart_draw"),   # AppLoopTrackView draw (+56)
+    0xC16C597C: (0xC15608B4, "loopstart_leave"),  # AppLoopTrackView close (slot 1, +4): releases the scene hold
 }
 CAP = 0x400000  # SYSTEM flash area
 GAP = (0xC16FFA98, 0xC4000000)
@@ -36,7 +38,7 @@ def main(src_p, pay_p, nm_p, out_p, rec_p):
     sysimg = chk[-1][0]
     I.require(sysimg.tag == "mmtd" and sysimg.offset == 0x30, "unexpected layout")
     I.require(len(pay) % 2 == 0 and LOAD % 32 == 0 and GAP[0] <= LOAD and LOAD + len(pay) <= GAP[1], "bad payload placement")
-    I.require(len(pay) <= 0x1000, "payload must stay inside the 4 KiB region proven on a device")
+    I.require(len(pay) <= 0x2000, "payload must stay under 8 KiB (7,952 bytes is the largest run on a device)")
     syms = {name: int(addr, 16) for addr, name in re.findall(r"^([0-9a-f]+) T (\w+)$", Path(nm_p).read_text(), re.M)}
     pos = sysimg.offset + 36; secs = []          # (base, file offset of data, size)
     for _ in range(I.word(src, sysimg.offset + 32)):
