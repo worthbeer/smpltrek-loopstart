@@ -38,7 +38,7 @@ def main(src_p, pay_p, nm_p, out_p, rec_p):
     sysimg = chk[-1][0]
     I.require(sysimg.tag == "mmtd" and sysimg.offset == 0x30, "unexpected layout")
     I.require(len(pay) % 2 == 0 and LOAD % 32 == 0 and GAP[0] <= LOAD and LOAD + len(pay) <= GAP[1], "bad payload placement")
-    I.require(len(pay) <= 0x2000, "payload must stay under 8 KiB (7,952 bytes is the largest run on a device)")
+    I.require(len(pay) <= 0x2000, "payload must stay under 8 KiB (8,168 bytes is the largest run on a device)")
     syms = {name: int(addr, 16) for addr, name in re.findall(r"^([0-9a-f]+) T (\w+)$", Path(nm_p).read_text(), re.M)}
     pos = sysimg.offset + 36; secs = []          # (base, file offset of data, size)
     for _ in range(I.word(src, sysimg.offset + 32)):

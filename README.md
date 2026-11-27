@@ -22,7 +22,9 @@ please buy and support Sonicware's products.
 
 If Sonicware or any other rights holder has a concern about anything in this repository, please open an issue and it will be addressed promptly.
 
-## What it does (v0.3)
+## What it does (v0.3.1)
+
+> **If you built v0.3, rebuild with v0.3.1:** v0.3 played changed loop lengths wrongly until the scene was reloaded.
 
 **On a loop clip's START POS page** (EDIT on the track, then push the **B** knob):
 
@@ -39,21 +41,23 @@ with it; OK opens that clip; CLR closes.
 **Modulo looping:** after a START change the clip loops what is left (`clip length - start`); a start past a shorter clip's end wraps around it; START at 1.1
 restores the whole clip. This replaces the clip's SEQ loop length (also one you set by hand), and SAVE stores it.
 
+**WARP** (in the clip list: FUNC + turn knob B, right on, left off; off after power-on): on group moves, clips the global start has passed keep their full
+length, so they play to their end, stay silent, then repeat. The others keep looping what is left.
+
 **EDIT page:** while the song plays, EDIT still holds the scene; leaving EDIT now lets the timeline carry on.
 
 ## Status (read this)
 
-| v0.3 feature | On the test unit | Emulator |
+| v0.3.1 feature | On the test unit | Emulator |
 |---|---|---|
 | Beat snap + readout (v0.1), shift (v0.2) | seen | yes |
-| Clip list page | seen | yes |
-| Modulo loop while playing, down to one beat; wrap past a short clip | seen | yes |
-| Timeline continues after leaving EDIT | seen | yes |
-| Full loop restored at 1.1; set all with wrapping; OK jump | not yet confirmed | yes |
+| Clip list page; timeline continues after leaving EDIT | seen | yes |
+| Modulo looping with the loop-length fix, WARP switch | tried, general positive report | yes, on playback position |
+| Full loop restored at 1.1; set all with wrapping; OK jump | not individually confirmed | yes (OK jump: earlier build) |
 | Loop lengths survive save + power cycle | **not yet checked** | save writes them |
 | Time signatures other than 4/4 | untested (4 beats per bar assumed) | untested |
 
-On the timeline some leftover loops go silent until a scene ends; inside EDIT they loop cleanly. See [releases/v0.3/RELEASE.md](releases/v0.3/RELEASE.md).
+Loops behave predictably while the scene is held in EDIT; on the timeline some leave gaps. See [releases/v0.3.1/RELEASE.md](releases/v0.3.1/RELEASE.md).
 
 The beat grid is each clip's own: beat = file length / (whole bars x 4), falling back to the project tempo when the file is not (within 2%)
 a whole number of bars.
@@ -64,9 +68,9 @@ You need your own official `SmplTrek.bin` for **3.2.174** (sha256 `3b6848b0f041b
 from Sonicware, and Python 3. Prebuilt payloads are in `releases/`, so no compiler is needed:
 
 ```sh
-python3 -I tools/build_image.py /path/to/official/SmplTrek.bin releases/v0.3/payload.bin releases/v0.3/symbols.txt out/SmplTrek.bin out/recipe.json
+python3 -I tools/build_image.py /path/to/official/SmplTrek.bin releases/v0.3.1/payload.bin releases/v0.3.1/symbols.txt out/SmplTrek.bin out/recipe.json
 python3 -I vendor/sonicware_integrity.py verify --profile smpltrek out/SmplTrek.bin      # must say 2/2 integrity fields match
-shasum -a 256 out/SmplTrek.bin    # v0.3: 7142ad6d124ef3951ef35c08e7f3fdef637947884b6322743dd7635982548cff
+shasum -a 256 out/SmplTrek.bin    # v0.3.1: 151963c8bd33e4003ed21b9ea479ff2202fc463aa20cae411cb18151c5e170c5
 ```
 
 `build_image.py` checks the source hash, appends one small code section (about 8 KB at `0xC3F00000`), redirects three function pointers of the

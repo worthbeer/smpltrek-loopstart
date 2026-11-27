@@ -34,7 +34,7 @@ the panel MCU or the presets area.
 5. Push B again: the page shows `END:` read-only for a moment, with no `B..` text; turning A returns to START and snaps again.
 6. OK, then play the scene: the clip starts at the chosen bar. Drums and other tracks are unchanged.
 7. v0.2 only: hold FUNC and turn A (shift: all loop clips in the scene move together, offsets kept); hold FUNC and turn B one click (set all). Scenes other than the one you opened are untouched.
-8. v0.3: on the EDIT page hold FUNC and turn D (clip list). Move a start with knob A: SEQ shows the remaining length; back to 1.1: SEQ returns to the full length.
+8. v0.3.1: on the EDIT page hold FUNC and turn D (clip list). Move a start with knob A: SEQ shows the remaining length; back to 1.1: SEQ returns to the full length.
 9. While the song plays, press EDIT, then leave: the timeline carries on.
 10. On a project you can afford to lose: save, power cycle, reopen: **are START and SEQ still as you set them?** (not yet confirmed by us; please report).
 

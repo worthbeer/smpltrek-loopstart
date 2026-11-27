@@ -1,4 +1,5 @@
 # v0.3 - clip list and modulo looping (work in progress)
+> **Do not use: known bug, fixed in [v0.3.1](../v0.3.1/RELEASE.md).** New loop lengths are stored correctly but play with the clip's old note length until the scene is reloaded.
 - Base: official SmplTrek 3.2.174 only. Expected output image: 1,961,645 bytes, sha256 `7142ad6d124ef3951ef35c08e7f3fdef637947884b6322743dd7635982548cff`.
 - New since v0.2: a clip list page (FUNC + turn knob D on a loop clip's EDIT page); modulo looping (a moved START loops what is left, wraps past the end of a
   shorter clip, and START at 1.1 restores the whole clip); SET ALL now wraps short clips instead of skipping them; leaving the EDIT page releases the scene hold.

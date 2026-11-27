@@ -179,4 +179,6 @@ Test unit: BOOT 1.0.17, PRESET 2.0.22, MCU 1.0.6 (one SmplTrek).
 - Clip table: 0xC13DAF08 + track*4416 + scene*276 = [START][END]. [EMU]
 - AppLoopTrackView slot 1 (word 0xC16C597C, stock 0xC15608B4) runs when the page closes. [EMU+HW]
 - A payload of 7,952 bytes at 0xC3F00000 has run on a unit. [HW]
+- Note-length cache: the engine reads LEN live from the clip record but takes the NOTE length from a per-track cache, 0xC1434678 + 0x4D4*track
+  (72 per quarter note), rebuilt only when the scene loads. Writing a record alone plays new LEN x old NOTE; v0.3.1 writes the cache too. [EMU]
 

@@ -1,4 +1,4 @@
-/* smpltrek-loopstart v0.3: loop-clip START in beats/bars, scene-wide shift / set-all, a clip list page, "modulo" looping, and release of the
+/* smpltrek-loopstart v0.3.1: loop-clip START in beats/bars, scene-wide shift / set-all, a clip list page, "modulo" looping with a WARP switch, and release of the
  * scene hold when leaving the clip EDIT page.   SmplTrek SYSTEM 3.2.174 ONLY.
  * Appended-section payload linked at 0xC3F00000 (link.ld). Hooks = three words of the AppLoopTrackView vtable (vptr 0xC16C5978):
  * close (slot 1, word 0xC16C597C), handleEncoder (+28, word 0xC16C5994) and draw (+56, word 0xC16C59B0).
@@ -114,7 +114,6 @@ void loopstart_draw(void *self, void *canvas) {
 static u32 hello_vt[24]  = { 0xFFFFFFFFu };     // non-zero initialiser keeps these in the loaded .data, not .bss
 static u32 hello_obj[96] = { 0xFFFFFFFFu };
 static u32 hello_state   = 1;                   // 1 = vtable not built yet, 0 = built
-static u32 hello_frames  = 1;
 
 static void hello_text(void *canvas, const char *s, int x, int y) {
     int xy[2] = { x, y };
@@ -182,14 +181,23 @@ static u32 clip_len(int tr, s32 end) {
 /* Loop length ("MODLOOP"): the live SEQ record of a clip (track x scene) = the store that playback and SAVE use [EMU]. Byte +2 = LEN, BYTE +4 = NOTE code (byte +5 holds something else, 0xFF in some projects: never touch it). */
 #define SEQ_REC(tr, sc) ((volatile u8 *)(0xC143A6E8u + (u32)(tr) * 140u + (u32)(sc) * 1400u))
 /* After a clip's START moved: loop what is left of the clip (clip length - START, in beats). START at beat 1 restores the whole clip.
+ * full != 0 keeps the WHOLE clip length instead (WARP: the clip plays to its end, then stays silent until its own length has elapsed).
  * LEN is 1..128, so: quarter notes up to 128 beats, half notes to 256, whole bars beyond (a remainder that does not fit is rounded UP). */
-static void set_loop(int tr, s32 start) {
-    s32 sc = FN(s32, FW_STORE_SCENE, (void))();
-    s32 end = clip_rec(tr, sc)[1];
-    if (end <= 0) return;
+static u32 clips_warp = 2;                           // 1 = WARP on, 2 = off (non-zero initial value keeps it in the loaded data); not saved
+static u32 beats_of(int tr, s32 sc, u32 *start_beat) {  // clip length in beats (0 = empty slot); START as the nearest beat
+    volatile s32 *r = clip_rec(tr, sc);
+    s32 end = r[1];
+    if (end <= 0) return 0;
     u32 len = clip_len(tr, end), f = fpb16(len);
-    u32 nbeats = divu((len << 4) + (f >> 1), f);
-    u32 sb = divu(((u32)start << 4) + (f >> 1), f);
+    s32 st = r[0]; if (st < 0) st = 0;
+    *start_beat = divu(((u32)st << 4) + (f >> 1), f);
+    return divu((len << 4) + (f >> 1), f);
+}
+static void set_loop(int tr, int full) {
+    s32 sc = FN(s32, FW_STORE_SCENE, (void))();
+    u32 sb = 0, nbeats = beats_of(tr, sc, &sb);
+    if (nbeats == 0) return;
+    if (full) sb = 0;
     u32 rem = (sb < nbeats) ? nbeats - sb : 1;
     u32 code = 3;                                    // 1/4
     if (rem > 256) { rem = (rem + 3) >> 2; code = 0; if (rem > 128) rem = 128; }   // 1/1
@@ -198,51 +206,47 @@ static void set_loop(int tr, s32 start) {
     volatile u8 *q = SEQ_REC(tr, sc);
     q[2] = (u8)rem;
     q[4] = (u8)code;
+    /* The engine reads LEN from the record but takes the NOTE length from a per-track cache that is only rebuilt when the scene is loaded: write the
+     * cache too (72 units per quarter; the unit's own SEQ screen also updates the 36-per-quarter copy and the copy 0x370 further on) [EMU] */
+    u32 v = 288u >> ((code == 3u) + (code != 0u));      // 1/4 = 72, 1/2 = 144, 1/1 = 288
+    volatile u32 *c = (volatile u32 *)(0xC1434678u + 0x4D4u * (u32)tr);
+    c[0] = v;
+    c[-3] = v >> 1;
+    c[0x374 / 4 + 1] = v;
 }
-
-static void macro_shift(int cur, s32 dbeats) {
-    /* Every other loop clip moves by the same number of beats; a clip too short for the move ROTATES: its new start is (nearest beat + shift) modulo its own length in
-     * beats, so a 1-bar loop shifted by 6 beats lands on beat 2, as if it kept looping. The edited clip itself is limited by the stock handler. */
+/* After a scene-wide move (or a WARP switch): set every loop clip's loop. With WARP on, the clips the global start has PASSED - the longest clip's
+ * START is at or beyond their end - keep their whole length; all others loop what is left. */
+static void loops_all(void) {
     s32 sc = FN(s32, FW_STORE_SCENE, (void))();
+    u32 longest = 0, lead = 0, sb = 0;
     for (int tr = 0; tr < MAX_TRACKS; tr++) {
-        if (tr == cur || !is_loop(tr)) continue;
-        volatile s32 *r = clip_rec(tr, sc);
-        s32 end = r[1];
-        if (end <= 0) continue;                       // empty clip slot
-        u32 len = clip_len(tr, end);
-        u32 f = fpb16(len);
-        u32 nbeats = divu((len << 4) + (f >> 1), f);  // clip length in beats
-        if (nbeats < 1) nbeats = 1;
-        s32 old = r[0]; if (old < 0) old = 0;
-        s32 nk = (s32)divu(((u32)old << 4) + (f >> 1), f) + dbeats;
-        if (nk >= 0) nk = (s32)((u32)nk - divu((u32)nk, nbeats) * nbeats);                 // rotate into [0, nbeats)
-        else         nk = nk + (s32)(divu((u32)(-nk) + nbeats - 1, nbeats) * nbeats);
-        s32 nv = (s32)line_of((u32)nk, f);
-        s32 hi = (s32)len - MAX_GUARD; if (hi < 0) hi = 0;
-        if (nv > hi) nv = (s32)line_of(beat_floor((u32)hi, f), f);    // safety: never past the stock maximum
-        if (nv != old) commit_other(tr, nv);
-        set_loop(tr, nv);
+        u32 n = is_loop(tr) ? beats_of(tr, sc, &sb) : 0;
+        if (n > longest) { longest = n; lead = sb; }
+    }
+    for (int tr = 0; tr < MAX_TRACKS; tr++) {
+        if (!is_loop(tr)) continue;
+        u32 n = beats_of(tr, sc, &sb);
+        if (n) set_loop(tr, clips_warp == 1u && lead >= n);
     }
 }
 
-static void macro_setall(int cur, u32 bar_index) {
+/* Move every OTHER loop clip of the scene: SHIFT (absolute = 0: by `beats` from its own nearest beat) or SET ALL (absolute = 1: to beat `beats`).
+ * A clip too short for the result wraps: modulo its own length in beats. */
+static void macro_move(int cur, s32 beats, int absolute) {
     s32 sc = FN(s32, FW_STORE_SCENE, (void))();
     for (int tr = 0; tr < MAX_TRACKS; tr++) {
         if (tr == cur || !is_loop(tr)) continue;
+        u32 sb = 0, nbeats = beats_of(tr, sc, &sb);
+        if (nbeats == 0) continue;                    // empty clip slot
+        s32 nk = beats + (absolute ? 0 : (s32)sb);
+        if (nk >= 0) nk = (s32)((u32)nk - divu((u32)nk, nbeats) * nbeats);                 // wrap into [0, nbeats)
+        else         nk = nk + (s32)(divu((u32)(-nk) + nbeats - 1, nbeats) * nbeats);
         volatile s32 *r = clip_rec(tr, sc);
-        s32 end = r[1];
-        if (end <= 0) continue;
-        u32 len = clip_len(tr, end);
-        u32 f = fpb16(len);
-        u32 nbeats = divu((len << 4) + (f >> 1), f), k = bar_index * BEATS_PER_BAR;
-        if (nbeats < 1) nbeats = 1;
-        k -= divu(k, nbeats) * nbeats;                // past the end of a shorter clip: wrap (modulo its own length)
-        s32 nv = (s32)line_of(k, f);
+        u32 len = clip_len(tr, r[1]), f = fpb16(len);
+        s32 nv = (s32)line_of((u32)nk, f);
         s32 hi = (s32)len - MAX_GUARD; if (hi < 0) hi = 0;
-        if (nv > hi) nv = (s32)line_of(beat_floor((u32)hi, f), f);
-        s32 old = r[0];
-        if (nv != old) commit_other(tr, nv);
-        set_loop(tr, nv);
+        if (nv > hi) nv = (s32)line_of(beat_floor((u32)hi, f), f);    // safety: never past the stock maximum
+        if (nv != r[0]) commit_other(tr, nv);
     }
 }
 
@@ -297,25 +301,27 @@ static int clips_enc(void *self, int enc, int delta) {  // knob A: START of the 
     (void)self;
     s32 sc = FN(s32, FW_STORE_SCENE, (void))();
     if (enc == 4) { clips_move(sc, delta > 0 ? +1 : -1); return 1; }
+    if (enc == 1 && func_held()) { clips_warp = delta > 0 ? 1u : 2u; loops_all(); return 1; }   // FUNC + knob B: right = WARP on, left = off
     if (enc != 0) return 0;
     int tr = clips_pick(sc, 0);
     if (tr < 0) return 0;
     volatile s32 *r = clip_rec(tr, sc);
-    s32 end = r[1];
-    u32 len = clip_len(tr, end), f = fpb16(len);
+    u32 k = 0;
+    if (beats_of(tr, sc, &k) == 0) return 0;                        // k = nearest beat line to the current START
+    u32 len = clip_len(tr, r[1]), f = fpb16(len);
     s32 old = r[0]; if (old < 0) old = 0;
-    s32 k = (s32)divu(((u32)old << 4) + (f >> 1), f);               // nearest beat line to the current START
-    s32 nk = k + delta; if (nk < 0) nk = 0;
+    s32 nk = (s32)k + delta; if (nk < 0) nk = 0;
     s32 nv = (s32)line_of((u32)nk, f);
     s32 hi = (s32)len - MAX_GUARD; if (hi < 0) hi = 0;
     if (nv > hi) nv = (s32)line_of(beat_floor((u32)hi, f), f);      // last line that fits
     if (nv == old) return 1;
     commit_other(tr, nv);
-    set_loop(tr, nv);
-    if (func_held()) {
+    if (!func_held()) set_loop(tr, 0);
+    else {
         s32 d = nv - old; u32 ad = d < 0 ? (u32)(-d) : (u32)d;
         s32 nb = (s32)divu((ad << 4) + (f >> 1), f);
-        macro_shift(tr, d < 0 ? -nb : nb);
+        macro_move(tr, d < 0 ? -nb : nb, 0);
+        loops_all();
     }
     return 1;
 }
@@ -375,12 +381,12 @@ static void clips_draw(void *self, void *canvas) {
         o = put_pad(o, tmp[0] == 'B' ? tmp + 1 : tmp, 6);
         *put_dec(tmp, divu(beats + (BEATS_PER_BAR >> 1), BEATS_PER_BAR)) = 0;
         o = put_pad(o, tmp, 4);                         // clip (file) length in bars
-        {   // loop length (SEQ LEN x NOTE) from the clip's record, in bars (a quarter note = 72 units, a bar = 288); one decimal below 10 bars,
+        {   // loop length (SEQ LEN x NOTE) from the clip's record, in bars (a quarter note = 24 units, a bar = 96); one decimal below 10 bars,
             // "+" for a fraction above (screen width)
-            static const unsigned short nv72[11] = { 288, 144, 108, 72, 54, 48, 36, 27, 24, 18, 9 };
+            static const u8 nv24[11] = { 96, 48, 36, 24, 18, 16, 12, 9, 8, 6, 3 };
             volatile u8 *q = SEQ_REC(tr, sc);
             u32 code = q[4]; if (code > 10u) code = 3u;
-            u32 tenths = divu((u32)nv72[code] * (u32)q[2] * 10u + 144u, 288u);
+            u32 tenths = divu((u32)nv24[code] * (u32)q[2] * 10u + 48u, 96u);
             u32 whole = divu(tenths, 10u), frac = tenths - whole * 10u;
             o = put_dec(o, whole);
             if (frac) { if (whole < 10u) { *o++ = '.'; *o++ = (char)('0' + frac); } else *o++ = '+'; }
@@ -391,8 +397,19 @@ static void clips_draw(void *self, void *canvas) {
         row++;
     }
     clips_play = play;                                  // the title (drawn next) shows PLAY or STOP
-    if (row == 0) hello_text(canvas, "NO LOOP CLIPS", 20, 56);
-    else if (row <= 7) hello_text(canvas, "A=START  OK=GO", 12, 100);
+    if (row == 0) hello_text(canvas, "NO LOOPS", 32, 56);
+    else if (row <= 7) hello_text(canvas, clips_warp == 1u ? "WARP ON" : "OK=GO", 12, 100);
+}
+
+/* Write the edited clip's START on the START POS page: same sequence as the stock handler. */
+static void commit_edit(void *self, int track, s32 v) {
+    FN(void, FW_STORE, (int))(v);
+    ((s32*)self)[6] = v;
+    void *obj = FN(void*, FW_REFRESH, (int))(track);
+    FN(void, FW_APPLY, (void*,int,int))(obj, v, 1);
+    obj = FN(void*, FW_REFRESH, (int))(track);
+    FN(void, FW_PREVIEW, (void*,int,float))(obj, v, 0.25f);
+    dp1240_set60();
 }
 
 /* After the stock handler: if the pending START moved, put it on a beat line (a bigger turn = whole bars). */
@@ -403,38 +420,30 @@ void loopstart_enc(void *self, int enc, int delta) {
     s32 v1 = ((s32*)self)[6];
     int track = dp296();
 
-    if (enc == 1 && func_held() && dp300() == 1 && dp304() == 0) {       // FUNC + knob B: SET ALL (this clip included) to one bar
-        u32 len = FN(u32, FW_CLIP_LEN, (int))(track);
-        u32 f = fpb16(len);
-        u32 barfr = line_of(BEATS_PER_BAR, f);
-        u32 cur = (u32)(v1 < 0 ? 0 : v1);
-        u32 bi = divu(cur + (barfr >> 1), barfr);                      // nearest bar to this clip's START
-        s32 hi = (s32)len - MAX_GUARD; if (hi < 0) hi = 0;
-        s32 tc = (s32)line_of(bi * BEATS_PER_BAR, f);
-        if (tc > hi) {                                                  // last whole bar that fits this clip
-            bi = divu(beat_floor((u32)hi, f), BEATS_PER_BAR);
-            tc = (s32)line_of(bi * BEATS_PER_BAR, f);
-        }
-        macro_setall(track, bi);
-        if (tc != v1) {
-            FN(void, FW_STORE, (int))(tc);
-            ((s32*)self)[6] = tc;
-            void *obj = FN(void*, FW_REFRESH, (int))(track);
-            FN(void, FW_APPLY, (void*,int,int))(obj, tc, 1);
-            obj = FN(void*, FW_REFRESH, (int))(track);
-            FN(void, FW_PREVIEW, (void*,int,float))(obj, tc, 0.25f);
-            dp1240_set60();
-        }
-        set_loop(track, tc);
-        return;
-    }
-    if (v1 == v0 || dp300() != 1 || dp304() != 0) return;   // never touch END-mode edits
-
+    if (dp300() != 1 || dp304() != 0) return;                 // only the START POS page: never touch END-mode edits
+    int setall = (enc == 1 && func_held());
+    if (!setall && v1 == v0) return;
     u32 len = FN(u32, FW_CLIP_LEN, (int))(track);
     u32 f = fpb16(len);
     u32 barfr = line_of(BEATS_PER_BAR, f);
     s32 hi = (s32)len - MAX_GUARD;   // stock maximum
     if (hi < 0) hi = 0;
+
+    if (setall) {                                                       // FUNC + knob B: SET ALL (this clip included) to one bar
+        u32 cur = (u32)(v1 < 0 ? 0 : v1);
+        u32 bi = divu(cur + (barfr >> 1), barfr);                      // nearest bar to this clip's START
+        s32 tc = (s32)line_of(bi * BEATS_PER_BAR, f);
+        if (tc > hi) {                                                  // last whole bar that fits this clip
+            bi = divu(beat_floor((u32)hi, f), BEATS_PER_BAR);
+            tc = (s32)line_of(bi * BEATS_PER_BAR, f);
+        }
+        macro_move(track, (s32)(bi * BEATS_PER_BAR), 1);
+        if (tc != v1) {
+            commit_edit(self, track, tc);
+        }
+        loops_all();
+        return;
+    }
     int up = v1 > v0;
     u32 mag = up ? (u32)(v1 - v0) : (u32)(v0 - v1);
     u32 unit = (mag >= (barfr >> 1)) ? BEATS_PER_BAR : 1;           // lines per step, in beats
@@ -463,20 +472,15 @@ void loopstart_enc(void *self, int enc, int delta) {
     if (t < 0) t = 0;
 
     if (t != v1) {
-        FN(void, FW_STORE, (int))(t);               // same sequence as the stock handler
-        ((s32*)self)[6] = t;
-        void *obj = FN(void*, FW_REFRESH, (int))(track);
-        FN(void, FW_APPLY, (void*,int,int))(obj, t, 1);
-        obj = FN(void*, FW_REFRESH, (int))(track);
-        FN(void, FW_PREVIEW, (void*,int,float))(obj, t, 0.25f);
-        dp1240_set60();
+        commit_edit(self, track, t);
     }
-    if (t != v0) set_loop(track, t);                // every START change sets that clip's loop to what remains
+    if (t != v0 && !func_held()) set_loop(track, 0);   // a single clip's START change: it loops what remains
     if (func_held() && t != v0) {                   // FUNC + knob A: SHIFT every other loop clip by the same beats
         s32 d = t - v0;
         u32 ad = d < 0 ? (u32)(-d) : (u32)d;
         s32 nb = (s32)divu((ad << 4) + (f >> 1), f);
-        macro_shift(track, d < 0 ? -nb : nb);
+        macro_move(track, d < 0 ? -nb : nb, 0);
+        loops_all();
     }
 }
 
